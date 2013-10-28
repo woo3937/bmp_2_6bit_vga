@@ -13,82 +13,91 @@
 #include <cstdio>
 #include <iomanip>
 #include <vector>
+#include <string>
 
 using namespace std;
 
-bool check_header(unsigned char header[]);
-
-ifstream in;
-
-int main(int argc, const char * argv[])
+class bmp2bin
 {
-    if(argc < 2)
-    {
-        cout << "Invalid Arguments bmp2raw <image filename>." << endl;
-        return 1;
-    }
+public:
     
-    in.open(argv[1]);
+    // Constructor
+    bmp2bin(){};
     
-    if(!in.is_open())
-    {
-        cout << "Cound not open " << argv[1] << "." << endl;
-        return 1;
-    }
+    // Desctructor
+    ~bmp2bin(){};
     
-    unsigned char header[54] = {0};
+    bool init(const string & input_image = "", const string & output_binary = "");
     
-    for(size_t i = 0; i < 54 && !in.eof(); ++i)
-    {
-        header[i] = in.get();
-    }
+    // convert image data
+    bool convert();
     
-    if(!check_header(header))
-        return false;
+private:
     
-    size_t x = header[18] + (header[19] << 8) + (header[20] << 16) + (header[21] << 24);
-    size_t y = header[22] + (header[23] << 8) + (header[24] << 16) + (header[25] << 24);
+    // check image header (54-bit header)
+    bool check_header(unsigned char header[]);
+    bool prepare_input_image();
+    bool prepare_ouput_binary();
     
-    if(argc < 3)
-    {
-        cout << "Specify output file. bmp2ram <image filename> <output filename>" << endl;
-        return 1;
-    }
+    unsigned char m_header[54];
     
-    ofstream out(argv[2], ios::out | ios::binary);
+    string input_image_filename;
+    string output_binary_filename;
     
-    vector< vector<unsigned char> > m_data;
+    ifstream input_image;
+    ofstream output_binary;
     
-    for(size_t i = 0; i < y; i++)
-    {
-        vector<unsigned char> temp;
-        for(size_t j = 0; j < x; j++)
-        {
-            temp.push_back((unsigned char)(((unsigned char)in.get() & 0xC0) >> 6) + (((unsigned char)in.get() & 0xC0) >> 4) + (((unsigned char)in.get() & 0xC0) >> 2));
-        }
-        m_data.push_back(temp);
-        temp.clear();
-    }
+    vector< vector<unsigned char> > m_image_data;
     
-    reverse(m_data.begin(), m_data.end());
-    
-    for(size_t i = 0; i < m_data.size(); i++)
-    {
-        for(size_t j = 0; j < m_data[i].size(); j++)
-        {
-            out << m_data[i][j];
-        }
-    }
+};
 
+bool bmp2bin::init(const string & input_image, const string & output_binary)
+{
+    string output;
     
-    return 0;
+    if(input_image == "")
+    {
+        cout << "Error, empty image input." << endl;
+        return false;
+    }
+    
+    input_image_filename = input_image;
+    
+    if(output_binary == "")
+    {
+        output_binary_filename = "out.bin";
+    }
+    else
+    {
+        output_binary_filename = output_binary;
+    }
+    
+    return true;
 }
 
-bool check_header(unsigned char header[])
+bool bmp2bin::prepare_input_image()
 {
-    unsigned short signature = 0;
+    input_image.open(input_image_filename);
     
-    signature = (header[0] << 8) + header[1];
+    if(!input_image.is_open())
+        return false;
+    
+    return true;
+}
+
+bool bmp2bin::prepare_ouput_binary()
+{
+    output_binary.open(output_binary_filename, ios::out | ios::binary);
+    
+    if(!output_binary.is_open())
+        return false;
+    
+    return true;
+}
+
+bool bmp2bin::check_header(unsigned char header[])
+{
+    unsigned short signature = (header[0] << 8) + header[1];
     
     if(signature != 0x424D)
     {
@@ -115,6 +124,78 @@ bool check_header(unsigned char header[])
     }
     
     return true;
+}
+
+
+bool bmp2bin::convert()
+{
     
+    if(!prepare_input_image())
+    {
+        cout << "Cound not open " << input_image_filename << "." << endl;
+        return false;
+    }
+    
+    unsigned char header[54] = {0};
+    
+    for(size_t i = 0; i < 54 && !input_image.eof(); ++i)
+    {
+        header[i] = input_image.get();
+    }
+    
+    if(!check_header(header))
+        return false;
+    
+    size_t x = header[18] + (header[19] << 8) + (header[20] << 16) + (header[21] << 24);
+    size_t y = header[22] + (header[23] << 8) + (header[24] << 16) + (header[25] << 24);
+    
+    if(!prepare_ouput_binary())
+    {
+        cout << "Could not open " << output_binary_filename << "." << endl;
+        return false;
+    }
+    
+    for(size_t i = 0; i < y; i++)
+    {
+        vector<unsigned char> temp;
+        for(size_t j = 0; j < x; j++)
+        {
+            temp.push_back((unsigned char)(((unsigned char)input_image.get() & 0xC0) >> 6) + (((unsigned char)input_image.get() & 0xC0) >> 4) + (((unsigned char)input_image.get() & 0xC0) >> 2));
+        }
+        m_image_data.push_back(temp);
+        temp.clear();
+    }
+    
+    reverse(m_image_data.begin(), m_image_data.end());
+    
+    for(size_t i = 0; i < m_image_data.size(); i++)
+    {
+        for(size_t j = 0; j < m_image_data[i].size(); j++)
+        {
+            output_binary << m_image_data[i][j];
+        }
+    }
+    
+    input_image.close();
+    output_binary.close();
+    
+    return true;
+}
+
+int main(int argc, const char * argv[])
+{
+    if(argc < 3)
+    {
+        cout << "Invalid Arguments bmp2raw <image filename> <output binary file>." << endl;
+        return 1;
+    }
+    
+    bmp2bin data;
+    
+    data.init(string(argv[1]), string(argv[2]));
+    
+    data.convert();
+    
+    return 0;
 }
 

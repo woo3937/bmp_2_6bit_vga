@@ -8,6 +8,7 @@ TODO
 ==============
 
 Version 0.1
+	-	Convert from chicken scratch to classes.
 	-	Comment Code
 
 Version 0.2
